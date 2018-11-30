@@ -22,21 +22,21 @@ class NRF52SPIOutput {
   } mSavedData;
 
   void saveSPIData() {
-    mSavedData.sck = NRF_SPI0->PSEL.SCK;
-    mSavedData.mosi = NRF_SPI0->PSEL.MOSI;
-    mSavedData.miso = NRF_SPI0->PSEL.MISO;
-    mSavedData.freq = NRF_SPI0->FREQUENCY;
-	mSavedData.config = NRF_SPI0->CONFIG;
-    mSavedData.enable = NRF_SPI0->ENABLE;
+    mSavedData.sck = NRF_SPIM0->PSEL.SCK;
+    mSavedData.mosi = NRF_SPIM0->PSEL.MOSI;
+    mSavedData.miso = NRF_SPIM0->PSEL.MISO;
+    mSavedData.freq = NRF_SPIM0->FREQUENCY;
+	mSavedData.config = NRF_SPIM0->CONFIG;
+    mSavedData.enable = NRF_SPIM0->ENABLE;
   }
 
   void restoreSPIData() {
-    NRF_SPI0->PSEL.SCK = mSavedData.sck;
-    NRF_SPI0->PSEL.MOSI = mSavedData.mosi;
-    NRF_SPI0->PSEL.MISO = mSavedData.miso;
-    NRF_SPI0->FREQUENCY = mSavedData.freq;
-	NRF_SPI0->CONFIG = mSavedData.config;
-    mSavedData.enable = NRF_SPI0->ENABLE;
+    NRF_SPIM0->PSEL.SCK = mSavedData.sck;
+    NRF_SPIM0->PSEL.MOSI = mSavedData.mosi;
+    NRF_SPIM0->PSEL.MISO = mSavedData.miso;
+    NRF_SPIM0->FREQUENCY = mSavedData.freq;
+	NRF_SPIM0->CONFIG = mSavedData.config;
+    mSavedData.enable = NRF_SPIM0->ENABLE;
   }
 
 public:
@@ -54,13 +54,15 @@ public:
 
     FastPin<_DATA_PIN>::setOutput();
     FastPin<_CLOCK_PIN>::setOutput();
-    NRF_SPI0->PSEL.SCK = _CLOCK_PIN;
-    NRF_SPI0->PSEL.MOSI = _DATA_PIN;
-    NRF_SPI0->PSEL.MISO = 0xFFFFFFFF;
-    NRF_SPI0->FREQUENCY = 0x80000000;
-	NRF_SPI0->CONFIG = config;
-    NRF_SPI0->ENABLE = 1;
-    NRF_SPI0->EVENTS_READY = 0;
+    NRF_SPIM0->PSEL.SCK = g_ADigitalPinMap[PIN_SPI_SCK];
+    NRF_SPIM0->PSEL.MOSI = g_ADigitalPinMap[PIN_SPI_MOSI];
+    NRF_SPIM0->PSEL.MISO = 1;
+    NRF_SPIM0->FREQUENCY = 0x80000000;
+	NRF_SPIM0->CONFIG = config;
+    NRF_SPIM0->EVENTS_ENDRX = 0;
+    NRF_SPIM0->EVENTS_ENDTX = 0;
+    NRF_SPIM0->EVENTS_STARTED = 0;
+    NRF_SPIM0->ENABLE = 0x00000007;
   }
 
   // latch the CS select
@@ -79,11 +81,20 @@ public:
   }
   
   // wait until all queued up data has been written
-  static void waitFully() __attribute__((always_inline)){ if(shouldWait()) { while(!NRF_SPI0->EVENTS_READY); } NRF_SPI0->EVENTS_READY = 0; }
-  static void wait() __attribute__((always_inline)){ if(shouldWait()) { while(!NRF_SPI0->EVENTS_READY); } NRF_SPI0->EVENTS_READY = 0; }
+  static void waitFully() __attribute__((always_inline)){ if(shouldWait()) { while(!NRF_SPIM0->EVENTS_END); } NRF_SPIM0->EVENTS_END = 0; }
+  static void wait() __attribute__((always_inline)){ if(shouldWait()) { while(!NRF_SPIM0->EVENTS_END); } NRF_SPIM0->EVENTS_END = 0; }
 
   // write a byte out via SPI (returns immediately on writing register)
-  static void writeByte(uint8_t b) __attribute__((always_inline)) { NRF_SPI0->TXD = b; NRF_SPI0->EVENTS_READY = 0; /*shouldWait(true);*/ }	// wait() causes random colors in strip. 
+  static void writeByte(uint8_t b) __attribute__((always_inline))
+  {
+      NRF_SPIM0->TXD.MAXCNT = sizeof(b);
+      NRF_SPIM0->TXD.PTR = (uint32_t)&b;
+      
+      NRF_SPIM0->EVENTS_END = 0;
+      NRF_SPIM0->TASKS_START = 1;
+      while (!NRF_SPIM0->EVENTS_END);
+      NRF_SPIM0->EVENTS_END = 0;
+  }
 
   // write a word out via SPI (returns immediately on writing register)
   static void writeWord(uint16_t w) __attribute__((always_inline)){ writeByte(w>>8); writeByte(w & 0xFF);  }
@@ -120,7 +131,7 @@ public:
   // write a single bit out, which bit from the passed in byte is determined by template parameter
   template <uint8_t BIT> inline static void writeBit(uint8_t b) {
     waitFully();
-    //NRF_SPI0->ENABLE = 0;
+    //NRF_SPIM0->ENABLE = 0;
     //if(b & 1<<BIT) {
     //  FastPin<_DATA_PIN>::hi();
     //} else {
@@ -128,7 +139,7 @@ public:
     //}
     //FastPin<_CLOCK_PIN>::toggle();
     //FastPin<_CLOCK_PIN>::toggle();
-    //NRF_SPI0->ENABLE = 1;
+    //NRF_SPIM0->ENABLE = 1;
 	  writeByte((b & (1 << BIT)) != 0);
   }
 
