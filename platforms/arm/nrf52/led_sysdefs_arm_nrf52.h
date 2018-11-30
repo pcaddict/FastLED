@@ -5,8 +5,8 @@
 #define NRF52
 #endif
 
-#define LED_TIMER NRF_TIMER3	//NRF_TIMER1 used by Arduino BSP.
-#define FASTLED_NO_PINMAP
+#define LED_TIMER NRF_TIMER1	//NRF_TIMER1 used by Arduino BSP.
+//#define FASTLED_NO_PINMAP
 //#define FASTLED_HAS_CLOCKLESS
 
 //#define FASTLED_SPI_BYTE_ONLY
@@ -38,6 +38,10 @@ typedef uint32_t prog_uint32_t;
 
 #ifndef FASTLED_ALLOW_INTERRUPTS
 #define FASTLED_ALLOW_INTERRUPTS 1
+#endif
+
+#if FASTLED_ALLOW_INTERRUPTS == 1
+#define FASTLED_ACCURATE_CLOCK
 #endif
 
 #define cli()  __disable_irq();

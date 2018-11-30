@@ -17,8 +17,8 @@ class NRF52SPIOutput {
     uint32_t mosi;
     uint32_t miso;
     uint32_t freq;
-    uint32_t enable;
 	uint32_t config;
+    uint32_t enable;
   } mSavedData;
 
   void saveSPIData() {
@@ -26,8 +26,8 @@ class NRF52SPIOutput {
     mSavedData.mosi = NRF_SPI0->PSEL.MOSI;
     mSavedData.miso = NRF_SPI0->PSEL.MISO;
     mSavedData.freq = NRF_SPI0->FREQUENCY;
-    mSavedData.enable = NRF_SPI0->ENABLE;
 	mSavedData.config = NRF_SPI0->CONFIG;
+    mSavedData.enable = NRF_SPI0->ENABLE;
   }
 
   void restoreSPIData() {
@@ -35,8 +35,8 @@ class NRF52SPIOutput {
     NRF_SPI0->PSEL.MOSI = mSavedData.mosi;
     NRF_SPI0->PSEL.MISO = mSavedData.miso;
     NRF_SPI0->FREQUENCY = mSavedData.freq;
-    mSavedData.enable = NRF_SPI0->ENABLE;
 	NRF_SPI0->CONFIG = mSavedData.config;
+    mSavedData.enable = NRF_SPI0->ENABLE;
   }
 
 public:
@@ -48,13 +48,17 @@ public:
 
   // initialize the SPI subssytem
   void init() {
+	uint32_t config = SPI_CONFIG_ORDER_MsbFirst;    // Set SPI CONFIG to MSB first.
+	config |= (SPI_CONFIG_CPOL_ActiveHigh << SPI_CONFIG_CPOL_Pos);    // SPI MODE0
+	config |= (SPI_CONFIG_CPHA_Leading << SPI_CONFIG_CPHA_Pos);    // SPI MODE0
+
     FastPin<_DATA_PIN>::setOutput();
     FastPin<_CLOCK_PIN>::setOutput();
     NRF_SPI0->PSEL.SCK = _CLOCK_PIN;
     NRF_SPI0->PSEL.MOSI = _DATA_PIN;
     NRF_SPI0->PSEL.MISO = 0xFFFFFFFF;
     NRF_SPI0->FREQUENCY = 0x80000000;
-	NRF_SPI0->CONFIG = 0;
+	NRF_SPI0->CONFIG = config;
     NRF_SPI0->ENABLE = 1;
     NRF_SPI0->EVENTS_READY = 0;
   }
@@ -75,11 +79,11 @@ public:
   }
   
   // wait until all queued up data has been written
-  static void waitFully() __attribute__((always_inline)){ if(shouldWait()) { while(NRF_SPI0->EVENTS_READY==0); } NRF_SPI0->EVENTS_READY = 0; }
-  static void wait() __attribute__((always_inline)){ if(shouldWait()) { while(NRF_SPI0->EVENTS_READY==0); } NRF_SPI0->EVENTS_READY = 0; }
+  static void waitFully() __attribute__((always_inline)){ if(shouldWait()) { while(!NRF_SPI0->EVENTS_READY); } NRF_SPI0->EVENTS_READY = 0; }
+  static void wait() __attribute__((always_inline)){ if(shouldWait()) { while(!NRF_SPI0->EVENTS_READY); } NRF_SPI0->EVENTS_READY = 0; }
 
   // write a byte out via SPI (returns immediately on writing register)
-  static void writeByte(uint8_t b) __attribute__((always_inline)) { wait(); NRF_SPI0->TXD = b; NRF_SPI0->EVENTS_READY = 0; shouldWait(true); }
+  static void writeByte(uint8_t b) __attribute__((always_inline)) { NRF_SPI0->TXD = b; NRF_SPI0->EVENTS_READY = 0; /*shouldWait(true);*/ }	// wait() causes random colors in strip. 
 
   // write a word out via SPI (returns immediately on writing register)
   static void writeWord(uint16_t w) __attribute__((always_inline)){ writeByte(w>>8); writeByte(w & 0xFF);  }
@@ -116,15 +120,16 @@ public:
   // write a single bit out, which bit from the passed in byte is determined by template parameter
   template <uint8_t BIT> inline static void writeBit(uint8_t b) {
     waitFully();
-    NRF_SPI0->ENABLE = 0;
-    if(b & 1<<BIT) {
-      FastPin<_DATA_PIN>::hi();
-    } else {
-      FastPin<_DATA_PIN>::lo();
-    }
-    FastPin<_CLOCK_PIN>::toggle();
-    FastPin<_CLOCK_PIN>::toggle();
-    NRF_SPI0->ENABLE = 1;
+    //NRF_SPI0->ENABLE = 0;
+    //if(b & 1<<BIT) {
+    //  FastPin<_DATA_PIN>::hi();
+    //} else {
+    //  FastPin<_DATA_PIN>::lo();
+    //}
+    //FastPin<_CLOCK_PIN>::toggle();
+    //FastPin<_CLOCK_PIN>::toggle();
+    //NRF_SPI0->ENABLE = 1;
+	  writeByte((b & (1 << BIT)) != 0);
   }
 
   template <uint8_t FLAGS, class D, EOrder RGB_ORDER> void writePixels(PixelController<RGB_ORDER> pixels) {
